@@ -1,0 +1,237 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">
+<html lang="en"><head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<title>untitled</title>
+	<meta name="generator" content="TextMate http://macromates.com/">
+	<meta name="author" content="reid">
+	<title>Assignment 3: Parallel Sorting</title>
+</head>
+<body>
+
+	<h1>Assignment 3: Parallel Sorting</h1>
+	<p><b>Due: Friday March 16, 10 p.m.</b></p>
+	
+	<h2>Introduction</h2>
+
+    <p>The ability to create related processes through the fork system call is
+    often used in programs that use multiple cooperating processes to solve a
+    single problem. This is especially useful on a multiprocessor where
+    different processes can truly be run in parallel. In the best case, if we
+    have N processes running in parallel and each process works on a subset of
+    the problem, then we can solve the problem in 1/N the time it takes to solve
+    the problem using 1 processor.</p>
+
+    <p>If it were always that easy, we would all be writing and running parallel
+    programs. It is rarely possible to divide up a problem into N independent
+    subsets. Somehow the results of each subset need to be combined. There is
+    also a difficult tradeoff to make between the benefits of parallelism and
+    the cost of starting up parallel processes and collecting results from
+    different processes. </p><p>
+
+
+    </p><p>For this assignment, you will write a parallel sorting program using Unix
+    processes (i.e., fork). We can hope to gain some benefit from using more
+    than one process even on a uniprocessor since we will be reading data from a
+    file, so we might win by letting the scheduler overlap the computation of
+    one process with the file I/O of another process. We would hope to see a
+    performance improvement if the program is run on a multiprocessor.</p>
+
+    <p>If we genuinely wanted to write a fast parallel sort program on a
+    shared-memory system, we would use a thread package rather than multiple
+    Unix processes. Linux/Unix processes are costly to create, and the
+    communication mechanisms between processes are also expensive. However, a
+    large part of the purpose of the assignment is to give you practice creating
+    and using multiple processes, and it is also interesting to measure the
+    performance of this kind of program.</p>
+
+<h2>Specifications</h2>
+
+    <p> The data to be sorted is a list of records where a record contains a
+    word and its frequency measure. The records are stored in a file in binary
+    format (see below for data sets and helper code). The format is similar to,
+    but not exactly the same as the output of A2.</p>
+
+    <p> You will write a C program called <tt>psort</tt> that takes 3 arguments:
+    the number of processes to create, the name of the input file to sort, and
+    the name of the file to write the output to. It will be called as shown
+    below. You must use <tt>getopt</tt> to read in the command line arguments
+    (remember that you used <tt>getopt</tt> in A2, so you have a template to
+    follow).</p>
+
+<pre>psort -n &lt;number of processes&gt; -f &lt;input file name&gt; -o &lt;output file name&gt;
+</pre>
+
+    <p> If <tt>N = &lt;number of processes&gt;</tt> then your program will
+    create <tt>N</tt> processes and divide up the file to be sorted into
+    <tt>N</tt> chunks. Each process will read <tt>1/N</tt> of the file and sort
+    its chunk of the file according to frequency (from smallest to largest) in memory
+    using the <tt>qsort</tt> library function.</p>
+
+    <p> The parent process will also set up a pipe between the parent and each
+    of its children. When a child has finished sorting its chunk, it will write
+    each record in sorted order to the pipe. The parent will merge the data from
+    each of the children by reading one record at a time from the pipes. The
+    parent will write the final sorted list to the output file. The output file
+    will be in the same binary format as the input. The psort program will print
+    to stdout the time it took to run (see below for details).</p>
+
+    <p> The parent must ensure that all of the children have terminated properly
+    and the parent will print out an error message if any of the children have
+    terminated prematurely.</p>
+
+<h2>Details</h2>
+
+    <p> The <tt>qsort</tt> function sorts an array in place. The final argument
+    to qsort is a pointer to a comparison function. The comparison function will
+    be called by <tt>qsort</tt> with arguments that are elements of the the
+    array to be sorted. The comparison function is given in <tt>helper.c</tt> <a href="http://www.anyexample.com/programming/c/qsort__sorting_array_of_strings__integers_and_structs.xml">Here</a>
+    is a tutorial on using qsort. The man page for qsort also has an
+    example.</p>
+    
+     <p>Since you can compute that each child will sort a portion of the file
+    from <tt>lower</tt> to <tt>upper</tt>, it would make a lot of sense to write
+    a function to perform this task. Each child will open the file, use
+    <tt>fseek</tt> to get to the correct location in the file, and begin reading
+    at that point. The child can read the data in one system call, use
+    <tt>qsort</tt> to sort the data, and then will write one record at a time to
+    the pipe connecting the child to the parent.</p>
+    
+     <p>The parent process will need to implement a <tt>merge</tt> function that
+    reads from each of the child pipes, and writes the record with the smallest
+    frequency to the output file each time. The following diagram shows how
+    merge might work with 4 child processes.</p>
+    
+<hr>
+     <img src="a3_files/merge.png" width="600">
+ <hr>
+    
+     <p> You must practice good system programming skills. Your program should
+    not crash under any circumstance. This means that the return value from all
+    system calls must be checked, files and pipes must be closed when not
+    needed, and all dynamically allocated memory must be freed before your
+    program terminates. You should also be careful to clean up any processes
+    left running. You can get a list of all of the processes you have on a
+    machine by <tt>ps aux | grep &lt;user name&gt;</tt> <b>Do not log out
+    without checking to make sure you aren't leaving processes behind</b></p>
+
+    <p> Some sample input files are provided in
+    <tt>/u/csc209h/winter/pub/a3-2012</tt> along with a few helper programs. You
+    will want to ensure that your program works with a relatively small data set
+    before you begin experimenting with the large ones.</p>
+    
+    <p>Your a3 repository has been populated with a few helper files.</p>
+
+     <p><b>Using <tt>gettimeofday</tt></b>: You should read the man page for
+    <tt>gettimeofday</tt>, but here is an example of how to use it, and how to
+    compute the time between two readings of <tt>gettimeofday</tt></p>
+
+    <pre>        struct timeval starttime, endtime;
+        double timediff;
+        
+        if( (gettimeofday(&amp;endtime, NULL)) == -1) {
+            perror("gettimeofday");
+            exit(1);
+        }
+        
+        // code you want to time
+        
+        if( (gettimeofday(&amp;endtime, NULL)) == -1) {
+            perror("gettimeofday");
+            exit(1);
+        }
+
+        timediff = (endtime.tv_sec - starttime.tv_sec) +
+            (endtime.tv_usec - starttime.tv_usec) / 1000000.0;
+        fprintf(stdout, "%.4f\n", timediff);
+    </pre>
+
+<h2>Performance Experiment</h2>
+
+    <p> The real question is how many processes should we use to get the best
+    performance out of our program?  To answer this question, you will need to
+    find out how long your program takes to run.  Use <tt>gettimeofday</tt> to
+    measure the time from the beginning of the program until the end, and print
+    this time to standard output. </p>
+
+    <p> Write a shell script called <tt>runtests</tt>that takes the size of the
+    data set as an argument and runs <tt>psort</tt> using different numbers of
+    processes. Remember that the binary data sets are stored in files that have
+    the size of the data set as part of the file name. The numbers of processes
+    you should try are 1, 2, 4, 8, 16, and 32. The shell script will print out
+    the number of processes and the time for each test. The shell script will
+    psort on each number of processes for each of the three provided datasets in
+    /u/csc209h/winter/pub/a3-2012. You may hardcode the absolute path to the
+    datasets, but you must not hardcode the path to the executable for
+    psort.</p>
+
+    <p> When you test your program, you should try to test it on a relatively
+    lightly loaded machine to get reasonably consistent results. (This is
+    another reason to finish your program early.)</p>
+
+    <p> The time it takes to run your sort program will depend on the hardware
+    you are running it on. To get a hardware independent view and to find out
+    how the program will behave as we increase the number of processes, we use a
+    measure called speedup. The equation for speedup is given below. The speedup
+    of the program given N processes is given by the ratio of the time to run
+    the program with one process and the time to run the program with N
+    processes.</p>
+
+    <pre>    	Speedup(N) = Time(1)/Time(N)
+    </pre>
+
+    <p> "Perfect speedup" means that a program would run N times faster with N
+    processes than with one process (we would also need N processors). A speedup
+    of less than 1 means that the program takes longer to run with N processes
+    that it does to run with 1 process which is clearly undesirable.</p>
+
+    <p> Calculate the speedup of your program for all of the numbers of
+    processes and data sets. (Hint: this is a great time for a little python
+    script or shell script that reads the output from your shell script and does
+    the calculations for you.) Submit a file called "speedup.txt" that contains
+    a table of the speedups obtained for all of the data sets and number of
+    processes.</p>
+
+    <p> If you get a chance, you should try running it both on greywolf or
+    redwolf (which each have 8 processors) and on a uniprocessor Linux machine
+    in the lab. (You can use ssh to log directly into one of the servers. E.g. <tt>ssh greywolf.cdf.toronto.edu</tt>)</p>
+    
+     <p>Think about what the performance results mean. Would you expect the
+    program to run faster with more than one process? Why or why not? Why does
+    the speedup eventually decrease below 1? How does the speedup differ between
+    data sets? Why? Did the performance results surprise you? If so, how?</p>
+
+<h2>What to submit</h2>
+
+<p>Do not commit to your repo any input or output files (especially big
+ones).</p>
+
+<p>Do remember to run <tt>svn add</tt> on any files you create that you want to
+be submitted. There will be an automatic 20% deduction if you ask for a remark
+because you forgot to commit a file.</p>
+
+
+<p>Commit to the a3 directory in your repository, the following:</p>
+<ul>
+
+    <li>All the files required to compile your <tt>psort</tt> program. It must
+    compile and run on CDF.</li>
+    
+     <li>A Makefile that allows the user to type "make" to compile all the
+    necessary code for your program. (There are sample Makefiles that should
+    help you.)</li>
+
+     <li>The shell script <tt>runtests</tt> that will run the <tt>psort</tt>
+     program on the three data sets provided in
+     <tt>/u/csc209h/winter/pub/a3-2012</tt>.</li>
+     
+      <li>A file called <tt>speedup.txt</tt> containing the table of speedups
+     you obtained by running your <tt>runtests</tt> program on a CDF
+     machine.</li>
+
+</ul>
+
+
+
+
+
+</body></html>
