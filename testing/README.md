@@ -8,7 +8,7 @@ The number of words (according to wc) found in each file are:
 * 22633 Family-Names
 * 869228 cis-surname
 
-# Input files for the sorting program
+### Input files for the sorting program
 
 * small.b (created using Congress)
 * medium.b (created using Family-Names)
